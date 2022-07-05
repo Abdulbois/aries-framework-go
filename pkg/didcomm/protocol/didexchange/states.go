@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/btcsuite/btcutil/base58"
 	"strings"
 
 	"github.com/google/uuid"
@@ -231,6 +232,23 @@ func (s *responded) ExecuteInbound(msg *stateMachineMsg, thid string, ctx *conte
 		err := msg.Decode(request)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("JSON unmarshalling of request: %w", err)
+		}
+		if ctx.doACAPyInterop {
+			lreq := LegacyRequest{}
+
+			err := msg.Decode(&lreq)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("unmarshalling failed: %w", err)
+			}
+			logger.Debugf("ExecuteInbound lreq.Connection.DIDDoc.Service[0] = %+v", lreq.Connection.DIDDoc.Service[0])
+			lreq.Connection.DIDDoc.Context = []string{"https://w3id.org/did/v1"}
+			request.DocAttach = &decorator.Attachment{
+				ID: "1",
+				Data: decorator.AttachmentData{
+					JSON: lreq.Connection.DIDDoc,
+				},
+			}
+			request.DID = lreq.Connection.DID
 		}
 
 		action, connRecord, err := ctx.handleInboundRequest(request, msg.options, msg.connRecord)
@@ -495,6 +513,39 @@ func (ctx *context) handleInboundRequest(request *Request, options *options,
 
 	// send exchange response
 	return func() error {
+		if ctx.doACAPyInterop {
+			recKey := responseDidDoc.Service[0].RecipientKeys[0]
+			responseDidDoc.Service[0].RecipientKeys[0] = base58.Encode(base58.Decode(strings.ReplaceAll(recKey, "did:key:z", ""))[2:])
+			con, _ := json.Marshal(ConnectionV1{
+				DID: response.DID,
+				DIDDoc: &did.DocV1{
+					ID:      responseDidDoc.ID,
+					Context: responseDidDoc.Context[0],
+					PublicKey: func() []did.PublicKey {
+						var keys []did.PublicKey
+						for _, v := range responseDidDoc.VerificationMethod {
+							keys = append(keys, did.PublicKey{
+								ID:              v.ID,
+								Type:            v.Type,
+								Controller:      v.Controller,
+								PublicKeyBase58: base58.Encode(v.Value),
+							})
+						}
+						return keys
+					}(),
+					Service: responseDidDoc.Service,
+				},
+			})
+			response.ConnectionSignature = &ConnectionSignature{
+				SignedData: base64.RawURLEncoding.EncodeToString(con),
+				Type:       "https://didcomm.org/signature/1.0/ed25519Sha512_single",
+				SignVerKey: senderVerKey,
+				Signature:  senderVerKey,
+			}
+			response.PleaseAck = &PleaseAck{
+				On: []string{"RECEIPT"},
+			}
+		}
 		return ctx.outboundDispatcher.Send(response, senderVerKey, destination)
 	}, connRec, nil
 }
@@ -525,7 +576,7 @@ func (ctx *context) prepareResponse(request *Request, responseDidDoc *did.Doc) (
 
 	// Interop: aca-py expects naked DID method-specific identifier for sov DIDs
 	// https://github.com/hyperledger/aries-cloudagent-python/issues/1048
-	response.DID = strings.TrimPrefix(responseDidDoc.ID, "did:sov:")
+	response.DID = responseDidDoc.ID
 	response.DocAttach = docAttach
 
 	return response, nil

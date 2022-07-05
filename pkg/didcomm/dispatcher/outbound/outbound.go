@@ -10,13 +10,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/btcsuite/btcutil/base58"
 	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/hyperledger/aries-framework-go/pkg/common/log"
 	"github.com/hyperledger/aries-framework-go/pkg/didcomm/common/middleware"
-	"github.com/hyperledger/aries-framework-go/pkg/didcomm/common/model"
 	"github.com/hyperledger/aries-framework-go/pkg/didcomm/common/service"
 	"github.com/hyperledger/aries-framework-go/pkg/didcomm/protocol/decorator"
 	"github.com/hyperledger/aries-framework-go/pkg/didcomm/transport"
@@ -345,31 +345,44 @@ func (o *Dispatcher) createForwardMessage(msg []byte, des *service.Destination) 
 		return msg, nil
 	}
 
-	// create forward message
-	forward := &model.Forward{
-		Type: forwardMsgType,
-		ID:   uuid.New().String(),
-		To:   des.RecipientKeys[0],
-		Msg:  msg,
+	des.RoutingKeys = append(des.RecipientKeys, des.RoutingKeys...)
+
+	for i, v := range des.RoutingKeys {
+		if i+1 >= len(des.RoutingKeys) {
+			break
+		}
+		var jwe legacyEnvelope
+		err = json.Unmarshal(msg, &jwe)
+		if err != nil {
+			return nil, fmt.Errorf("failed UnMarshal to bytes: %w", err)
+		}
+		// create forward message
+		fwd := forward{
+			Type: forwardMsgType,
+			ID:   uuid.New().String(),
+			To:   base58.Encode(base58.Decode(strings.ReplaceAll(v, "did:key:z", ""))[2:]),
+			Msg:  &jwe,
+		}
+		// convert forward message to bytes
+		msg, err = json.Marshal(fwd)
+		if err != nil {
+			return nil, fmt.Errorf("failed marshal to bytes: %w", err)
+		}
+		//logger.Debugf("-Send createForwardMessage msg-%v = %+v", i+1, string(msg))
+
+		msg, err = o.packager.PackMessage(&transport.Envelope{
+			MediaTypeProfile: mtProfile,
+			Message:          msg,
+			FromKey:          senderKey,
+			ToKeys:           []string{des.RoutingKeys[i+1]},
+		})
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to pack forward msg: %w", err)
+		}
 	}
 
-	// convert forward message to bytes
-	req, err := json.Marshal(forward)
-	if err != nil {
-		return nil, fmt.Errorf("failed marshal to bytes: %w", err)
-	}
-
-	packedMsg, err := o.packager.PackMessage(&transport.Envelope{
-		MediaTypeProfile: mtProfile,
-		Message:          req,
-		FromKey:          senderKey,
-		ToKeys:           des.RoutingKeys,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to pack forward msg: %w", err)
-	}
-
-	return packedMsg, nil
+	return msg, nil
 }
 
 func (o *Dispatcher) addTransportRouteOptions(req []byte, des *service.Destination) ([]byte, error) {
@@ -427,4 +440,18 @@ func (o *Dispatcher) mediaTypeProfile(des *service.Destination) string {
 	}
 
 	return mt
+}
+
+type forward struct {
+	Type string          `json:"@type,omitempty"`
+	ID   string          `json:"@id,omitempty"`
+	To   string          `json:"to,omitempty"`
+	Msg  *legacyEnvelope `json:"msg,omitempty"`
+}
+
+type legacyEnvelope struct {
+	Protected  string `json:"protected,omitempty"`
+	IV         string `json:"iv,omitempty"`
+	CipherText string `json:"ciphertext,omitempty"`
+	Tag        string `json:"tag,omitempty"`
 }

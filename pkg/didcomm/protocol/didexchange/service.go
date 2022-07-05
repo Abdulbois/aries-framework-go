@@ -10,10 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
-
 	"github.com/google/uuid"
-
 	"github.com/hyperledger/aries-framework-go/pkg/common/log"
 	"github.com/hyperledger/aries-framework-go/pkg/crypto"
 	"github.com/hyperledger/aries-framework-go/pkg/didcomm/common/service"
@@ -29,6 +26,7 @@ import (
 	didstore "github.com/hyperledger/aries-framework-go/pkg/store/did"
 	"github.com/hyperledger/aries-framework-go/pkg/vdr"
 	"github.com/hyperledger/aries-framework-go/spi/storage"
+	"strings"
 )
 
 var logger = log.New("aries-framework/did-exchange/service")
@@ -861,6 +859,35 @@ func (s *Service) requestMsgRecord(msg service.DIDCommMsg) (*connection.Record, 
 	// ACA-Py Interop: https://github.com/hyperledger/aries-cloudagent-python/issues/1048
 	if !strings.HasPrefix(connRecord.TheirDID, "did") {
 		connRecord.TheirDID = "did:peer:" + connRecord.TheirDID
+	}
+
+	if s.ctx.doACAPyInterop {
+		logger.Debugf("requestMsgRecord doc = %+v", request.Connection)
+
+		lreq := LegacyRequest{}
+		err := msg.Decode(&lreq)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshalling failed: %w", err)
+		}
+
+		connRecord.TheirDID = lreq.Connection.DID
+		recKeys := lreq.Connection.DIDDoc.Service[0]["recipientKeys"].([]interface{})
+		recKeysString := make([]string, len(recKeys))
+		for i, v := range recKeys {
+			recKeysString[i] = v.(string)
+		}
+		connRecord.RecipientKeys = recKeysString
+
+		routKeys := lreq.Connection.DIDDoc.Service[0]["routingKeys"].([]interface{})
+		routKeysString := make([]string, len(routKeys))
+		for i, v := range routKeys {
+			routKeysString[i] = v.(string)
+		}
+		connRecord.RoutingKeys = routKeysString
+
+		connRecord.ServiceEndPoint = lreq.Connection.DIDDoc.Service[0]["serviceEndpoint"].(string)
+
+		logger.Debugf("requestMsgRecord connRecord.TheirDID = %+v", connRecord.TheirDID)
 	}
 
 	if err := s.connectionRecorder.SaveConnectionRecord(connRecord); err != nil {

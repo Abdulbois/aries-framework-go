@@ -272,6 +272,30 @@ type Doc struct {
 	processingMeta       processingMeta
 }
 
+// DocV1 DID Document definition.
+type DocV1 struct {
+	Context              string `json:"@context,omitempty"`
+	ID                   string
+	PublicKey            []PublicKey    `json:"publicKey,omitempty"`
+	Service              []Service      `json:"service,omitempty"`
+	Authentication       []Verification `json:"authentication,omitempty"`
+	AssertionMethod      []Verification
+	CapabilityDelegation []Verification
+	CapabilityInvocation []Verification
+	KeyAgreement         []Verification
+	Created              *time.Time `json:"created,omitempty"`
+	Updated              *time.Time `json:"updated,omitempty"`
+	Proof                []Proof
+	processingMeta       processingMeta
+}
+
+type PublicKey struct {
+	ID              string `json:"id,omitempty"`
+	Type            string `json:"type,omitempty"`
+	Controller      string `json:"controller,omitempty"`
+	PublicKeyBase58 string `json:"publicKeyBase58,omitempty"`
+}
+
 // processingMeta include info how to process the doc.
 type processingMeta struct {
 	baseURI string
@@ -466,6 +490,7 @@ func ParseDocument(data []byte) (*Doc, error) {
 	raw := &rawDoc{}
 
 	err := json.Unmarshal(data, &raw)
+	fmt.Printf("ParseDocument raw = %v\n", raw)
 	if err != nil {
 		return nil, fmt.Errorf("JSON marshalling of did doc bytes bytes failed: %w", err)
 	} else if raw == nil {
@@ -474,8 +499,8 @@ func ParseDocument(data []byte) (*Doc, error) {
 
 	// Interop: handle legacy did docs that incorrectly indicate they use the new format
 	// aca-py issue: https://github.com/hyperledger/aries-cloudagent-python/issues/1048
-	if doACAPYInterop && requiresLegacyHandling(raw) {
-		raw.Context = []string{contextV011}
+	if doACAPYInterop {
+		raw.Context = []string{ContextV1Old}
 	} else {
 		// validate did document
 		err = validate(data, raw.schemaLoader())
@@ -499,6 +524,7 @@ func ParseDocument(data []byte) (*Doc, error) {
 	if len(raw.VerificationMethod) != 0 {
 		verificationMethod = raw.VerificationMethod
 	}
+	fmt.Printf("ParseDocument verificationMethod %+v\n", verificationMethod)
 
 	vm, err := populateVerificationMethod(context[0], doc.ID, baseURI, verificationMethod)
 	if err != nil {
@@ -518,6 +544,7 @@ func ParseDocument(data []byte) (*Doc, error) {
 	}
 
 	doc.Proof = proofs
+	fmt.Printf("ParseDocument doc = %v\n", doc)
 
 	return doc, nil
 }
@@ -736,11 +763,8 @@ func getVerification(doc *Doc, rawVerification interface{},
 		return nil, errors.New("rawVerification is not map[string]interface{}")
 	}
 
-	if context == contextV011 {
-		keyID, keyIDExist = m[jsonldPublicKey].(string)
-		if keyIDExist {
-			return getVerificationsByKeyID(doc.ID, doc.processingMeta.baseURI, vm, relationship, keyID)
-		}
+	if keyID, keyIDExist = m[jsonldPublicKey].(string); keyIDExist {
+		return getVerificationsByKeyID(doc.ID, doc.processingMeta.baseURI, vm, relationship, keyID)
 	}
 
 	if context == contextV12019 {
@@ -809,6 +833,7 @@ func makeRelativeDIDURL(didURL, baseURI, didID string) string {
 
 func populateVerificationMethod(context, didID, baseURI string,
 	rawVM []map[string]interface{}) ([]VerificationMethod, error) {
+	fmt.Printf("populateVerificationMethod rawVM %+v\n", rawVM)
 	var verificationMethods []VerificationMethod
 
 	for _, v := range rawVM {
@@ -835,6 +860,7 @@ func populateVerificationMethod(context, didID, baseURI string,
 			Controller:  controller,
 			relativeURL: isRelative,
 		}
+		fmt.Printf("populateVerificationMethod vm %+v\n", vm)
 
 		err := decodeVM(&vm, v)
 		if err != nil {

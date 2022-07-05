@@ -296,12 +296,12 @@ func createStartCMD(server server) *cobra.Command { //nolint: funlen,gocyclo,goc
 		Long:  `Start an Aries agent controller`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// log level
-			logLevel, err := getUserSetVar(cmd, agentLogLevelFlagName, agentLogLevelEnvKey, true)
-			if err != nil {
-				return err
-			}
+			logLevel := "DEBUG"
+			//if err != nil {
+			//	return err
+			//}
 
-			err = setLogLevel(logLevel)
+			err := setLogLevel(logLevel)
 			if err != nil {
 				return err
 			}
@@ -782,7 +782,6 @@ func startAgent(parameters *agentParameters) error {
 
 	// set message handler
 	parameters.msgHandler = msghandler.NewRegistrar()
-
 	ctx, err := createAriesAgent(parameters)
 	if err != nil {
 		return err

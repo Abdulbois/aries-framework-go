@@ -165,7 +165,7 @@ func New(ctx provider) (*Client, error) {
 
 	keyAgreementType := ctx.KeyAgreementType()
 	if keyAgreementType == "" {
-		keyAgreementType = kms.X25519ECDHKWType
+		keyAgreementType = kms.ED25519Type
 	}
 
 	mtp := ctx.MediaTypeProfiles()

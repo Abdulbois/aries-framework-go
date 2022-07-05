@@ -256,6 +256,9 @@ func (m DIDCommMsgMap) typeV2() string {
 // Type returns the message type.
 func (m DIDCommMsgMap) Type() string {
 	if val := m.typeV1(); val != "" {
+		if strings.Contains(val, "/ack") {
+			val = "https://didcomm.org/didexchange/1.0/ack"
+		}
 		return val
 	}
 

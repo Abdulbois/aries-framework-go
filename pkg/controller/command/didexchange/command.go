@@ -190,7 +190,7 @@ func (c *Command) CreateInvitation(rw io.Writer, req io.Reader) command.Error {
 		invitation, err = c.client.CreateInvitationWithDID(c.defaultLabel, request.Public)
 	} else {
 		invitation, err = c.client.CreateInvitation(c.defaultLabel,
-			didexchange.WithRouterConnectionID(request.RouterConnectionID))
+			didexchange.WithRouterConnectionID(request.RouterConnectionID), didexchange.WithKeyType(kms.ED25519Type))
 	}
 
 	if err != nil {

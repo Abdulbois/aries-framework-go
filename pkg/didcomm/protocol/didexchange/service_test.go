@@ -7,11 +7,15 @@ SPDX-License-Identifier: Apache-2.0
 package didexchange
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -386,7 +390,21 @@ func TestService_Handle_Invitee(t *testing.T) {
 	payloadBytes, err := json.Marshal(invitation)
 	require.NoError(t, err)
 
-	didMsg, err := service.ParseDIDCommMsgMap(payloadBytes)
+	postBody, _ := json.Marshal(map[string]string{
+		"action": "start_connection_as_inviter",
+	})
+
+	reqBody := bytes.NewBuffer(postBody)
+
+	resp, err := http.Post("http://127.0.0.1:8083", "application/json", reqBody)
+	if err != nil {
+		log.Fatalf("An Error Occured %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+
+	didMsg, err := service.ParseDIDCommMsgMap(body)
 	require.NoError(t, err)
 
 	_, err = s.HandleInbound(didMsg, service.EmptyDIDCommContext())

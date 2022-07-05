@@ -99,6 +99,8 @@ type Response struct {
 	// DocAttach an attachment containing the did doc of the responder.
 	// Optional, a responder may provide a publicly-resolvable DID, rather than including an attached did doc.
 	DocAttach *decorator.Attachment `json:"did_doc~attach,omitempty"`
+
+	PleaseAck *PleaseAck `json:"~please_ack,omitempty"`
 }
 
 // ConnectionSignature connection signature.
@@ -106,13 +108,19 @@ type ConnectionSignature struct {
 	Type       string `json:"@type,omitempty"`
 	Signature  string `json:"signature,omitempty"`
 	SignedData string `json:"sig_data,omitempty"`
-	SignVerKey string `json:"signers,omitempty"`
+	SignVerKey string `json:"signer,omitempty"`
 }
 
 // Connection connection.
 type Connection struct {
-	DID    string   `json:"did,omitempty"`
-	DIDDoc *did.Doc `json:"did_doc,omitempty"`
+	DID    string   `json:"DID,omitempty"`
+	DIDDoc *did.Doc `json:"DIDDoc,omitempty"`
+}
+
+// ConnectionV1 connection.
+type ConnectionV1 struct {
+	DID    string     `json:"DID,omitempty"`
+	DIDDoc *did.DocV1 `json:"DIDDoc,omitempty"`
 }
 
 // Complete defines a2a DID exchange complete message.
@@ -121,4 +129,8 @@ type Complete struct {
 	Type   string            `json:"@type,omitempty"`
 	ID     string            `json:"@id,omitempty"`
 	Thread *decorator.Thread `json:"~thread,omitempty"`
+}
+
+type PleaseAck struct {
+	On []string `json:"on,omitempty"`
 }

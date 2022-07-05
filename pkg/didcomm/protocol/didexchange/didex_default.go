@@ -1,3 +1,4 @@
+//go:build !ACAPyInterop
 // +build !ACAPyInterop
 
 /*
@@ -15,7 +16,7 @@ import (
 )
 
 const (
-	doACAPyInterop = false
+	doACAPyInterop = true
 )
 
 // Interop: this is a stub method, that is substituted for special functionality
